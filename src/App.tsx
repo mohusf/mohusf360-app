@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useStore, nw } from './store/appStore';
 import { calcLifeScore } from './lib/lifeScore';
+import { useAuth } from './hooks/useAuth';
+import { useSubscription } from './hooks/useSubscription';
 import Header from './components/layout/Header';
 import BottomNav, { type ViewKey } from './components/layout/BottomNav';
 import Toast from './components/layout/Toast';
+import AuthModal from './components/auth/AuthModal';
+import AuthCallback from './components/auth/AuthCallback';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import TodayView from './components/views/TodayView';
 import TrackView from './components/views/TrackView';
@@ -12,16 +16,22 @@ import WealthView from './components/views/WealthView';
 import MeView from './components/views/MeView';
 
 export default function App() {
+  // Auth callback route
+  if (window.location.pathname === '/auth/callback') {
+    return <AuthCallback />;
+  }
+
   const [view, setView] = useState<ViewKey>('today');
+  const [showAuth, setShowAuth] = useState(false);
   const store = useStore();
   const netWorth = nw(store);
+  const auth = useAuth();
+  const subscription = useSubscription(auth.user);
 
   const handleOnboardFinish = (data: { income: number; sleepGoal: number; stepsGoal: number; waterGoal: number; caloriesGoal: number }) => {
     if (data.income > 0) {
       store.addIncome({ id: Date.now(), name: 'Primary Income', type: 'salary', amount: data.income });
     }
-    store.updateHealth('sleep', 0); // just to init, goals set below
-    // Update health goals via direct store mutation through updateHealth pattern
     useStore.setState(s => ({
       health: {
         ...s.health,
@@ -69,16 +79,33 @@ export default function App() {
       <Header
         netWorth={netWorth}
         onNWClick={() => changeView('wealth')}
-        onAvatarClick={() => changeView('me')}
+        onAvatarClick={() => auth.user ? changeView('me') : setShowAuth(true)}
       />
       <div className="main">
         {view === 'today' && <div className="vw"><TodayView /></div>}
         {view === 'track' && <div className="vw"><TrackView /></div>}
         {view === 'insights' && <div className="vw"><InsightsView /></div>}
         {view === 'wealth' && <div className="vw"><WealthView /></div>}
-        {view === 'me' && <div className="vw"><MeView /></div>}
+        {view === 'me' && (
+          <div className="vw">
+            <MeView
+              user={auth.user}
+              subscription={subscription}
+              onSignIn={() => setShowAuth(true)}
+              onSignOut={auth.signOut}
+            />
+          </div>
+        )}
       </div>
       <BottomNav active={view} onChange={changeView} />
+      <AuthModal
+        open={showAuth}
+        onClose={() => setShowAuth(false)}
+        onAuth={() => setShowAuth(false)}
+        signUp={auth.signUp}
+        signIn={auth.signIn}
+        signInWithGoogle={auth.signInWithGoogle}
+      />
     </>
   );
 }
